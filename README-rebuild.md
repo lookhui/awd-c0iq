@@ -1,7 +1,5 @@
 # awd-c0iq Rebuild
 
-本目录是根据 `awd-h1m-pro.exe` 逆向还原出的 `awd-c0iq` Go/Wails 版本源码重建工程。
-
 ## 主要入口
 
 - `main.go`：程序入口与 Wails 应用启动
