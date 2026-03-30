@@ -1,0 +1,28 @@
+version: "1.0"
+shell:
+  port: "80"
+  pass: "pass"
+  path: "/"
+  file: "index.php"
+  method: "POST"
+  timeout: 5
+  proxy: ""
+ssh:
+  host: "127.0.0.1"
+  port: "22"
+  username: "root"
+  password: "change_me"
+  path: "/var/www/html"
+database:
+  host: "127.0.0.1"
+  port: "3306"
+  username: "root"
+  password: "change_me"
+  name: "ctf"
+undeadHorse:
+  urlPass: "pass"
+  pass: "pass"
+  filename: "favicon.php"
+wormShell:
+  urlPass: "pass"
+  pass: "pass"

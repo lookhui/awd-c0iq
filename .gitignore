@@ -1,0 +1,30 @@
+# Build outputs
+/dist/
+*.exe
+*.exe~
+*.i64
+
+# Runtime data
+/log/
+/output/
+/pcap/
+/pcap-smoke/
+/bleve/
+/bleve-smoke/
+*.sqlite
+*.pcap
+smoke.out
+smoke.err
+
+# Local configuration / IDE
+/config.yaml
+/.idea/
+/.vscode/
+*.user
+*.suo
+
+# Go
+/bin/
+/pkg/
+*.test
+coverage.out

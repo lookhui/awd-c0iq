@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>awd-c0iq</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@wailsio/runtime": "/wails/runtime.js"
+      }
+    }
+  </script>
+  <script src="/wails/runtime.js" type="module"></script>
+</head>
+<body>
+  <div class="shell" id="appShell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">A</div>
+        <div>
+          <h1>安全运维控制台</h1>
+          <p>awd-c0iq</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="overview" type="button">
+          <span class="nav-icon">OV</span>
+          <span><strong>总览</strong><small>SSH 终端与文件管理</small></span>
+        </button>
+        <button class="nav-item" data-page="assets" type="button">
+          <span class="nav-icon">AS</span>
+          <span><strong>资产</strong><small>目标范围与运行配置</small></span>
+        </button>
+        <button class="nav-item" data-page="threats" type="button">
+          <span class="nav-icon">AT</span>
+          <span><strong>攻击</strong><small>命令执行、取旗、载荷攻防</small></span>
+        </button>
+        <button class="nav-item" data-page="incidents" type="button">
+          <span class="nav-icon">DF</span>
+          <span><strong>防守</strong><small>备份、加固、恢复、改密</small></span>
+        </button>
+        <button class="nav-item" data-page="logs" type="button">
+          <span class="nav-icon">LG</span>
+          <span><strong>流量</strong><small>抓包、记录、输出文件</small></span>
+        </button>
+      </nav>
+
+      <section class="sidebar-section">
+        <div class="section-label">工作区状态</div>
+        <div class="sidebar-metric"><span>目标数</span><strong id="sideTargets">0</strong></div>
+        <div class="sidebar-metric"><span>在线数</span><strong id="sideAlive">0</strong></div>
+        <div class="sidebar-metric"><span>SSH</span><strong id="sideSSH">未连接</strong></div>
+        <div class="sidebar-metric"><span>抓流量</span><strong id="sideCapture">空闲</strong></div>
+      </section>
+
+      <section class="sidebar-section sidebar-actions">
+        <button class="action-btn primary" id="openSSHModalBtn" type="button">SSH 连接</button>
+        <button class="action-btn" id="reloadWorkspaceBtn" type="button">刷新工作区</button>
+      </section>
+
+      <div class="sidebar-user">
+        <div class="user-avatar">OP</div>
+        <div>
+          <strong>本地控制端</strong>
+          <span id="sidebarUserHint">等待 SSH 连接</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div>
+            <span class="page-kicker" id="pageKicker">总览</span>
+            <h2 class="topbar-title" id="pageTitle">SSH 终端与文件管理</h2>
+          </div>
+          <p class="topbar-subtitle" id="pageSubtitle">程序启动后先建立 SSH 连接，随后在主界面中统一处理终端、文件和攻防任务。</p>
+        </div>
+        <div class="top-status">
+          <div class="status-block wide">
+            <span>SSH 状态</span>
+            <strong id="topSSHStatus">未连接</strong>
+          </div>
+          <div class="status-block">
+            <span>终端</span>
+            <strong id="topTerminalStatus">未启动</strong>
+          </div>
+          <div class="status-block">
+            <span>抓流量</span>
+            <strong id="topCaptureStatus">空闲</strong>
+          </div>
+          <div class="status-block">
+            <span>最近任务</span>
+            <strong id="topTaskStatus">空闲</strong>
+          </div>
+          <div class="top-divider"></div>
+          <div class="clock-block" id="clockValue">--:--:--</div>
+          <button class="action-btn tiny" id="sshDisconnectBtn" type="button">断开</button>
+          <button class="action-btn tiny" id="sshReconnectBtn" type="button">重连</button>
+          <button class="drawer-toggle" id="openDrawerBtn" type="button" aria-label="打开日志与详情">
+            <span>日志 / 详情</span>
+            <i id="drawerAlertDot"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="page active" id="page-overview">
+          <section class="subnav-strip">
+            <button class="subnav-item active" data-overview-view="terminal" type="button">SSH 终端会话</button>
+            <button class="subnav-item" data-overview-view="files" type="button">文件管理器</button>
+          </section>
+
+          <div class="subview active" id="overview-view-terminal">
+            <div class="workspace-grid-2 terminal-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Terminal</span>
+                    <h3>交互式 SSH 终端</h3>
+                    <p>支持持续输出命令、滚动回看与命令历史。</p>
+                  </div>
+                  <div class="chip-row">
+                    <span class="status-chip neutral" id="terminalSessionBadge">未启动</span>
+                  </div>
+                </div>
+                <div class="panel-body terminal-panel">
+                  <pre class="terminal-output" id="terminalOutput"></pre>
+                  <div class="terminal-input-row">
+                    <label class="terminal-prompt" for="terminalInput">$</label>
+                    <input id="terminalInput" type="text" placeholder="输入命令后回车，例如: whoami">
+                    <button class="action-btn primary" id="terminalSendBtn" type="button">发送</button>
+                  </div>
+                </div>
+              </section>
+
+              <div class="stack-grid">
+                <section class="panel">
+                  <div class="panel-head">
+                    <div>
+                      <span class="panel-label">Connection</span>
+                      <h3>连接信息</h3>
+                    </div>
+                  </div>
+                  <div class="panel-body info-list" id="sshStateList"></div>
+                </section>
+
+                <section class="panel">
+                  <div class="panel-head">
+                    <div>
+                      <span class="panel-label">Quick Actions</span>
+                      <h3>终端操作</h3>
+                    </div>
+                  </div>
+                  <div class="panel-body button-column">
+                    <button class="action-btn primary" id="terminalStartBtn" type="button">启动终端</button>
+                    <button class="action-btn" id="terminalClearBtn" type="button">清空终端输出</button>
+                    <button class="action-btn" id="openFilesViewBtn" type="button">切换到文件管理器</button>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <div class="subview" id="overview-view-files">
+            <section class="toolbar-panel wrap">
+              <label class="inline-field grow">
+                <span>当前路径</span>
+                <input id="remotePathInput" type="text" placeholder="/var/www/html">
+              </label>
+              <button class="action-btn" id="remotePathGoBtn" type="button">跳转</button>
+              <button class="action-btn" id="remoteUpBtn" type="button">上级目录</button>
+              <button class="action-btn" id="remoteRefreshBtn" type="button">刷新</button>
+              <button class="action-btn" id="remoteNewDirBtn" type="button">新建目录</button>
+              <button class="action-btn" id="remoteNewFileBtn" type="button">新建文件</button>
+              <button class="action-btn primary" id="remoteUploadBtn" type="button">上传文件</button>
+            </section>
+
+            <div class="workspace-grid-2 file-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">SFTP</span>
+                    <h3>远程文件列表</h3>
+                    <p>双击目录进入，双击文本文件打开编辑器。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="remoteFilesTable"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Preview</span>
+                    <h3>文件预览</h3>
+                  </div>
+                </div>
+                <div class="panel-body file-side-panel">
+                  <pre class="code-block" id="remoteFilePreview">选择远程文件后在这里预览内容。</pre>
+                  <div class="button-row">
+                    <button class="action-btn" id="remoteDownloadBtn" type="button">下载</button>
+                    <button class="action-btn secondary" id="remoteEditBtn" type="button">编辑</button>
+                    <button class="action-btn" id="remoteRenameBtn" type="button">重命名</button>
+                    <button class="action-btn danger" id="remoteDeleteBtn" type="button">删除</button>
+                  </div>
+                  <div class="drop-zone" id="remoteDropZone">
+                    <strong>拖拽本地文件到这里上传</strong>
+                    <span>目标目录：<code id="remoteDropTarget">/</code></span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-assets">
+          <section class="subnav-strip">
+            <button class="subnav-item active" data-asset-view="scope" type="button">目标范围</button>
+            <button class="subnav-item" data-asset-view="config" type="button">运行配置</button>
+          </section>
+
+          <div class="subview active" id="asset-view-scope">
+            <section class="toolbar-panel wrap">
+              <button class="action-btn primary" id="saveTargetsBtn" type="button">保存目标</button>
+              <button class="action-btn" id="loadTargetsBtn" type="button">载入目标</button>
+              <button class="action-btn" id="detectTargetsBtn" type="button">探测存活</button>
+              <button class="action-btn secondary" id="testTargetsBtn" type="button">测试 Shell</button>
+              <label class="inline-field right">
+                <span>过滤</span>
+                <input id="targetFilter" type="text" placeholder="按 IP 或状态过滤">
+              </label>
+            </section>
+
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Targets</span>
+                    <h3>目标池</h3>
+                    <p>支持单个 IP、逐行输入和简单 IP 段。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <label class="field">
+                    <span>目标输入</span>
+                    <textarea id="targetsInput" placeholder="192.168.1.10&#10;192.168.1.11&#10;192.168.1.20-30"></textarea>
+                  </label>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Status</span>
+                    <h3>目标状态</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="targetsTable"></div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="subview" id="asset-view-config">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Configuration</span>
+                  <h3>运行配置</h3>
+                  <p>保存为全局配置，供攻击、防守、流量模块复用。</p>
+                </div>
+                <div class="chip-row">
+                  <span class="status-chip neutral" id="configStatus">未加载</span>
+                </div>
+              </div>
+              <div class="panel-body form-stack">
+                <section class="subpanel">
+                  <header>
+                    <strong>WebShell</strong>
+                    <small>连接参数、固定查询、原始命令模式与代理设置。</small>
+                  </header>
+                  <div class="form-grid three">
+                    <label class="field"><span>端口</span><input id="shellPort" type="text"></label>
+                    <label class="field"><span>密码字段</span><input id="shellPass" type="text"></label>
+                    <label class="field"><span>方法</span><select id="shellMethod"><option value="POST">POST</option><option value="GET">GET</option></select></label>
+                    <label class="field"><span>固定查询</span><input id="shellQuery" type="text" placeholder="a=system"></label>
+                    <label class="field"><span>载荷类型</span><select id="shellPayload"><option value="php">PHP 片段</option><option value="raw">原始命令</option></select></label>
+                    <label class="field"><span>路径</span><input id="shellPath" type="text"></label>
+                    <label class="field"><span>文件</span><input id="shellFile" type="text"></label>
+                    <label class="field full"><span>代理</span><input id="shellProxy" type="text" placeholder="http://127.0.0.1:8080"></label>
+                  </div>
+                </section>
+
+                <section class="subpanel">
+                  <header>
+                    <strong>远程工作目录</strong>
+                    <small>SSH 连接参数统一在登录弹窗中维护，这里只保留远程网站根目录。</small>
+                  </header>
+                  <div class="form-grid two">
+                    <label class="field full"><span>网站根目录</span><input id="sshPath" type="text" placeholder="/var/www/html"></label>
+                  </div>
+                </section>
+
+                <section class="subpanel">
+                  <header>
+                    <strong>数据库</strong>
+                    <small>备份、恢复和改密使用。</small>
+                  </header>
+                  <div class="form-grid three">
+                    <label class="field"><span>主机</span><input id="dbHost" type="text"></label>
+                    <label class="field"><span>端口</span><input id="dbPort" type="text"></label>
+                    <label class="field"><span>用户名</span><input id="dbUsername" type="text"></label>
+                    <label class="field"><span>密码</span><input id="dbPassword" type="password"></label>
+                    <label class="field full"><span>数据库名</span><input id="dbName" type="text"></label>
+                  </div>
+                </section>
+
+                <div class="button-row">
+                  <button class="action-btn" id="loadConfigBtn" type="button">重新加载配置</button>
+                  <button class="action-btn primary" id="saveConfigBtn" type="button">保存配置</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page" id="page-threats">
+          <section class="subnav-strip">
+            <button class="subnav-item active" data-threat-view="execute" type="button">命令执行</button>
+            <button class="subnav-item" data-threat-view="flags" type="button">Flag 提交</button>
+            <button class="subnav-item" data-threat-view="payloads" type="button">载荷攻防</button>
+          </section>
+
+          <div class="subview active" id="threat-view-execute">
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Shell Test</span>
+                    <h3>Shell 连通性测试</h3>
+                    <p>异步执行，结果写入成功 / 错误历史文件。</p>
+                  </div>
+                </div>
+                <div class="panel-body form-grid two">
+                  <label class="field">
+                    <span>任务 ID</span>
+                    <input id="taskStatusId" type="text" placeholder="shell-test-...">
+                  </label>
+                  <div class="button-row align-end">
+                    <button class="action-btn primary" id="attackTestBtn" type="button">测试 Shell</button>
+                    <button class="action-btn" id="taskStatusBtn" type="button">查询任务</button>
+                  </div>
+                  <div class="hint-banner full" id="taskSummaryBanner">最近任务：空闲</div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Command</span>
+                    <h3>命令执行</h3>
+                    <p>载荷配置已经独立到“载荷攻防”分页；这里仅负责执行与回显。</p>
+                  </div>
+                </div>
+                <div class="panel-body form-grid two">
+                  <label class="field">
+                    <span>执行链路</span>
+                    <select id="execShellType">
+                      <option value="shell">普通 Shell</option>
+                      <option value="undead">Undead</option>
+                      <option value="md5">MD5</option>
+                      <option value="worm">Worm</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>命令</span>
+                    <input id="attackCommand" type="text" placeholder="whoami">
+                  </label>
+                  <div class="button-row full">
+                    <button class="action-btn primary" id="runExecBtn" type="button">执行命令</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Results</span>
+                    <h3>命令执行结果</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="operationTable"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Tasks</span>
+                    <h3>任务进度</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="taskTable"></div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="subview" id="threat-view-flags">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Flags</span>
+                  <h3>Flag 获取与提交</h3>
+                  <p>结果追加写入 <code>output/flag.txt</code>，不会覆盖历史记录。</p>
+                </div>
+              </div>
+              <div class="panel-body form-grid three">
+                <label class="field"><span>Flag 路径</span><input id="flagPath" type="text" value="/flag"></label>
+                <label class="field"><span>Shell 类型</span><select id="flagShellType"><option value="shell">普通 Shell</option><option value="undead">Undead</option><option value="md5">MD5</option><option value="worm">Worm</option></select></label>
+                <label class="field"><span>取旗命令</span><input id="flagCommand" type="text" value="cat /flag"></label>
+                <label class="field"><span>URL 密码</span><input id="flagUrlPass" type="text" placeholder="pass"></label>
+                <label class="field"><span>木马密码</span><input id="flagPass" type="text" placeholder="pass"></label>
+                <label class="field"><span>POST 字段</span><input id="flagPostField" type="text" placeholder="b"></label>
+                <div class="button-row full">
+                  <button class="action-btn primary" id="fetchFlagsBtn" type="button">通过 HTTP 获取</button>
+                  <button class="action-btn secondary" id="fetchFlagsShellBtn" type="button">通过 Shell 获取</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Flag Records</span>
+                  <h3>Flag 结果表</h3>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="table-wrap" id="flagTable"></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="subview" id="threat-view-payloads">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Payloads</span>
+                  <h3>载荷攻防</h3>
+                  <p>在这里维护 Undead / MD5 / Worm 参数与代码模板，并直接发起上传。</p>
+                </div>
+              </div>
+              <div class="panel-body form-stack">
+                <section class="subpanel">
+                  <header>
+                    <strong>参数区</strong>
+                    <small>载荷代码保存到 <code>output/payloads</code>，上传时优先使用这里的内容。</small>
+                  </header>
+                  <div class="form-grid three">
+                    <label class="field"><span>Undead URL 密码</span><input id="payloadUndeadUrlPass" type="text"></label>
+                    <label class="field"><span>Undead 密码</span><input id="payloadUndeadPass" type="text"></label>
+                    <label class="field"><span>Undead 文件名</span><input id="payloadUndeadFilename" type="text"></label>
+                    <label class="field"><span>MD5 密码</span><input id="payloadMd5Pass" type="text"></label>
+                    <label class="field"><span>MD5 POST 字段</span><input id="payloadMd5Field" type="text"></label>
+                    <label class="field"><span>Worm URL 密码</span><input id="payloadWormUrlPass" type="text"></label>
+                    <label class="field"><span>Worm 密码</span><input id="payloadWormPass" type="text"></label>
+                  </div>
+                  <div class="button-row">
+                    <button class="action-btn" id="payloadResetDefaultsBtn" type="button">恢复默认代码</button>
+                    <button class="action-btn primary" id="savePayloadConfigBtn" type="button">保存参数与载荷</button>
+                    <button class="action-btn" id="uploadUndeadBtn" type="button">上传 Undead</button>
+                    <button class="action-btn" id="uploadMd5Btn" type="button">上传 MD5</button>
+                    <button class="action-btn" id="uploadWormBtn" type="button">上传 Worm</button>
+                  </div>
+                </section>
+
+                <div class="workspace-grid-3 payload-grid">
+                  <section class="subpanel">
+                    <header>
+                      <strong>Undead</strong>
+                      <small><code>output/payloads/undead.php</code></small>
+                    </header>
+                    <textarea id="payloadEditorUndead" class="payload-editor" spellcheck="false"></textarea>
+                  </section>
+
+                  <section class="subpanel">
+                    <header>
+                      <strong>MD5</strong>
+                      <small><code>output/payloads/md5.php</code></small>
+                    </header>
+                    <textarea id="payloadEditorMd5" class="payload-editor" spellcheck="false"></textarea>
+                  </section>
+
+                  <section class="subpanel">
+                    <header>
+                      <strong>Worm</strong>
+                      <small><code>output/payloads/worm.php</code></small>
+                    </header>
+                    <textarea id="payloadEditorWorm" class="payload-editor" spellcheck="false"></textarea>
+                  </section>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page" id="page-incidents">
+          <section class="toolbar-panel wrap">
+            <span class="toolbar-note" id="defenseScopeHint">请先建立 SSH 连接，防守动作会直接作用于当前 SSH 主机。</span>
+          </section>
+
+          <div class="workspace-grid-3">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Backup</span>
+                  <h3>备份与巡检</h3>
+                </div>
+              </div>
+              <div class="panel-body button-column">
+                <button class="action-btn primary" id="backupWebBtn" type="button">备份网站目录</button>
+                <button class="action-btn secondary" id="backupDBBtn" type="button">备份数据库</button>
+                <button class="action-btn" id="findShellsBtn" type="button">查找木马</button>
+                <button class="action-btn" id="inspectHostBtn" type="button">主机巡检</button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Hardening</span>
+                  <h3>加固动作</h3>
+                </div>
+              </div>
+              <div class="panel-body button-column">
+                <button class="action-btn primary" id="hardenWebBtn" type="button">加固网站目录</button>
+                <button class="action-btn" id="uploadsReadonlyBtn" type="button">上传目录只读</button>
+                <button class="action-btn" id="hardenPhpBtn" type="button">加固 PHP 配置</button>
+                <button class="action-btn secondary" id="deployWafBtn" type="button">部署简易 WAF</button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Recovery</span>
+                  <h3>恢复与改密</h3>
+                </div>
+              </div>
+              <div class="panel-body form-grid two">
+                <label class="field full"><span>恢复路径</span><input id="restorePath" type="text" placeholder="output/backup/web/xxx.tar.gz"></label>
+                <label class="field full"><span>新数据库密码</span><input id="dbPasswordNew" type="text" placeholder="new_password"></label>
+                <label class="field"><span>SSH 用户</span><input id="sshUserForChange" type="text" value="root"></label>
+                <label class="field"><span>SSH 端口</span><input id="sshPortForChange" type="text" value="22"></label>
+                <label class="field"><span>最大并发</span><input id="maxConcurrency" type="text" value="10"></label>
+                <label class="field"><span>新 SSH 密码</span><input id="newPassword" type="text"></label>
+                <label class="field full"><span>旧密码列表</span><textarea id="oldPasswords">root&#10;123456&#10;admin</textarea></label>
+                <div class="button-row full">
+                  <button class="action-btn danger" id="restoreWebBtn" type="button">恢复网站目录</button>
+                  <button class="action-btn danger" id="restoreDbBtn" type="button">恢复数据库</button>
+                  <button class="action-btn danger" id="changeDbPasswordBtn" type="button">修改数据库密码</button>
+                  <button class="action-btn danger" id="changeSshPasswordBtn" type="button">批量修改 SSH 密码</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-label">Defense Records</span>
+                <h3>防守结果</h3>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="table-wrap" id="defenseTable"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" id="page-logs">
+          <section class="subnav-strip">
+            <button class="subnav-item active" data-log-view="live" type="button">实时抓流量</button>
+            <button class="subnav-item" data-log-view="history" type="button">抓包记录</button>
+            <button class="subnav-item" data-log-view="files" type="button">输出文件</button>
+          </section>
+
+          <div class="subview active" id="log-view-live">
+            <section class="toolbar-panel wrap">
+              <span class="toolbar-note" id="captureScopeHint">请先建立 SSH 连接，抓取当前 SSH 主机上的入站流量。</span>
+              <label class="inline-field">
+                <span>网卡</span>
+                <input id="captureInterface" type="text" value="any">
+              </label>
+              <label class="inline-field grow">
+                <span>附加过滤器</span>
+                <input id="captureFilter" type="text" placeholder="可留空自动识别；也支持端口/关键字/原生 tcpdump 语法">
+              </label>
+              <button class="action-btn primary" id="startCaptureBtn" type="button">开始抓流量</button>
+              <button class="action-btn danger" id="stopCaptureBtn" type="button">停止抓流量</button>
+              <button class="action-btn" id="refreshCaptureBtn" type="button">刷新状态</button>
+            </section>
+
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Sessions</span>
+                    <h3>远程抓流量会话</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="captureSessionTable"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Live Traffic</span>
+                    <h3>实时流量记录</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="trafficTable"></div>
+                </div>
+              </section>
+            </div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-label">Preview</span>
+                  <h3>实时详情</h3>
+                </div>
+              </div>
+              <div class="panel-body">
+                <pre class="code-block" id="trafficPreview">选择抓流量记录后在这里查看原始内容。</pre>
+              </div>
+            </section>
+          </div>
+
+          <div class="subview" id="log-view-history">
+            <section class="toolbar-panel wrap">
+              <label class="inline-field grow">
+                <span>关键字搜索</span>
+                <input id="captureHistoryQuery" type="text" placeholder="支持 & 并且查询，例如 80&post&172.27.132.236">
+              </label>
+              <label class="inline-field">
+                <span>条数</span>
+                <input id="captureHistoryLimit" type="text" value="200">
+              </label>
+              <button class="action-btn primary" id="refreshCaptureHistoryBtn" type="button">刷新记录</button>
+            </section>
+
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">History</span>
+                    <h3>抓包记录</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="captureHistoryTable"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Detail</span>
+                    <h3>历史详情</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <pre class="code-block" id="captureHistoryPreview">选择历史记录后在这里查看详情。</pre>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="subview" id="log-view-files">
+            <section class="toolbar-panel wrap">
+              <button class="action-btn" id="refreshFilesBtn" type="button">刷新输出文件</button>
+              <button class="action-btn secondary" id="readLogBtn" type="button">读取最新日志</button>
+            </section>
+
+            <div class="workspace-grid-2">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Outputs</span>
+                    <h3>工作区输出文件</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="table-wrap" id="outputTable"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="panel-label">Content</span>
+                    <h3>文件 / 日志预览</h3>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <pre class="code-block" id="filePreview">选择输出文件或读取日志后在这里查看内容。</pre>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div>
+        <span class="panel-label">Logs</span>
+        <h3>日志与详情</h3>
+      </div>
+      <button class="drawer-close" id="closeDrawerBtn" type="button">关闭</button>
+    </div>
+    <div class="drawer-tabs">
+      <button class="drawer-tab active" data-tab="summary" type="button">概览</button>
+      <button class="drawer-tab" data-tab="details" type="button">详情</button>
+      <button class="drawer-tab" data-tab="logs" type="button">日志</button>
+    </div>
+    <div class="drawer-body">
+      <section class="drawer-panel active" id="drawer-summary">
+        <div class="drawer-metrics">
+          <div class="sidebar-metric"><span>当前页面</span><strong id="drawerPage">总览</strong></div>
+          <div class="sidebar-metric"><span>SSH</span><strong id="drawerSSH">未连接</strong></div>
+          <div class="sidebar-metric"><span>抓流量</span><strong id="drawerCapture">空闲</strong></div>
+          <div class="sidebar-metric"><span>最近任务</span><strong id="drawerTask">空闲</strong></div>
+        </div>
+        <section class="drawer-section">
+          <div class="panel-label">选中记录</div>
+          <pre class="code-block small" id="drawerSelection">未选择任何记录。</pre>
+        </section>
+      </section>
+      <section class="drawer-panel" id="drawer-details">
+        <pre class="code-block" id="drawerDetails">等待结果输出...</pre>
+      </section>
+      <section class="drawer-panel" id="drawer-logs">
+        <pre class="code-block" id="drawerLogs">等待事件...</pre>
+      </section>
+    </div>
+  </aside>
+
+  <div class="modal-backdrop" id="confirmModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="panel-label">确认操作</span>
+        <h3 id="confirmTitle">确认操作</h3>
+      </div>
+      <div class="modal-body" id="confirmMessage">该操作可能影响远程环境，是否继续？</div>
+      <div class="modal-actions">
+        <button class="action-btn" id="confirmCancel" type="button">取消</button>
+        <button class="action-btn danger" id="confirmAccept" type="button">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="inputModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="panel-label">输入</span>
+        <h3 id="inputTitle">输入内容</h3>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span id="inputLabel">名称</span>
+          <input id="inputValue" type="text">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="inputCancel" type="button">取消</button>
+        <button class="action-btn primary" id="inputAccept" type="button">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="editorModal" hidden>
+    <div class="modal-card modal-wide">
+      <div class="modal-head">
+        <div>
+          <span class="panel-label">Editor</span>
+          <h3 id="editorTitle">远程文件编辑</h3>
+          <p id="editorPath">/var/www/html/index.php</p>
+        </div>
+      </div>
+      <div class="modal-body">
+        <textarea id="editorContent" class="payload-editor editor-textarea" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="editorCancel" type="button">取消</button>
+        <button class="action-btn primary" id="editorSave" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop show" id="sshModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <span class="panel-label">SSH 连接</span>
+        <h3>建立 SSH 会话</h3>
+      </div>
+      <div class="modal-body form-grid two">
+        <label class="field full"><span>IP 地址</span><input id="sshConnectHost" type="text" placeholder="192.168.1.10"></label>
+        <label class="field"><span>端口号</span><input id="sshConnectPort" type="text" value="22"></label>
+        <label class="field"><span>用户名</span><input id="sshConnectUser" type="text" value="root"></label>
+        <label class="field full"><span>密码</span><input id="sshConnectPassword" type="password"></label>
+        <div class="hint-banner full" id="sshConnectStatus">状态：等待连接...</div>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="sshCancelBtn" type="button">取消</button>
+        <button class="action-btn primary" id="sshConnectBtn" type="button">连接</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
